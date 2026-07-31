@@ -1,3 +1,5 @@
+/exment
+/laravel-admin
 /node_modules
 /public/build
 /public/hot
@@ -14,3 +16,7 @@ npm-debug.log
 yarn-error.log
 /.idea
 /.vscode
+
+# keep vendored docker-exment env files (docker defaults, not secrets)
+!/docker-exment/.env
+!/docker-exment/docker/php/.env

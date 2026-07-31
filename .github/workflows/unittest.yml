@@ -1,0 +1,68 @@
+name: phpunit
+
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  EXMENT_REPOSITORY: exceedone/exment
+  EXMENT_REF: master
+  LARAVEL_ADMIN_REPOSITORY: exceedone/laravel-admin
+  LARAVEL_ADMIN_REF: master
+  LARAVEL_ADMIN_VERSION: 4.99.99
+
+jobs:
+  exment-testing:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        db: ["mysql", "mariadb"]
+        test: ["feature", "unit", "browser"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.EXMENT_REPOSITORY }}
+          ref: ${{ env.EXMENT_REF }}
+          path: ./exment
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LARAVEL_ADMIN_REPOSITORY }}
+          ref: ${{ env.LARAVEL_ADMIN_REF }}
+          path: ./laravel-admin
+
+      - name: Link this repository into docker-exment as exment-boilerplate
+        run: ln -s .. docker-exment/exment-boilerplate
+
+      - name: Docker Compose Version
+        run: docker compose --version
+
+      - name: Make ${{ matrix.db }} up
+        working-directory: docker-exment
+        run: |
+          make ${{ matrix.db }}-up
+
+      - name: copy compose.dev.json
+        working-directory: docker-exment
+        run: |
+          docker compose -f docker-compose.yml exec -T php cp composer.dev.json composer.json
+          docker compose -f docker-compose.yml exec -T php cp composer.dev.lock composer.lock
+
+      - name: Use cloned laravel-admin as path repository
+        working-directory: docker-exment
+        run: |
+          docker compose -f docker-compose.yml exec -T php composer config repositories.laravel-admin '{"type": "path", "url": "./laravel-admin", "options": {"symlink": true, "versions": {"exceedone/laravel-admin": "${{ env.LARAVEL_ADMIN_VERSION }}"}}}'
+          docker compose -f docker-compose.yml exec -T php composer update exceedone/laravel-admin --no-install --no-scripts --no-audit --with-all-dependencies
+
+      - name: Make ${{ matrix.db }} Initialize
+        working-directory: docker-exment
+        run: |
+          make ${{ matrix.db }}-init
+
+      - name: PHPUnit Test
+        working-directory: docker-exment
+        run: |
+          docker compose -f docker-compose.yml exec -T php composer run exment:test:${{ matrix.test }}
