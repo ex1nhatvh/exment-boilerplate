@@ -54,6 +54,7 @@ jobs:
       - name: Use cloned laravel-admin as path repository
         working-directory: docker-exment
         run: |
+          docker compose -f docker-compose.yml exec -T php git config --global --add safe.directory '*'
           docker compose -f docker-compose.yml exec -T php composer config repositories.laravel-admin '{"type": "path", "url": "./laravel-admin", "options": {"symlink": true, "versions": {"exceedone/laravel-admin": "${{ env.LARAVEL_ADMIN_VERSION }}"}}}'
           docker compose -f docker-compose.yml exec -T php composer update exceedone/laravel-admin --no-install --no-scripts --no-audit --with-all-dependencies
 
