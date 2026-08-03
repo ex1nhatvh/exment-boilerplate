@@ -1,17 +1,23 @@
-name: phpstan
+name: phpstan-baseline
 
 on:
-  push:
   workflow_dispatch:
+    inputs:
+      exment_ref:
+        description: exment ref to baseline
+        required: false
+        default: feature/laravel-12
+      exment_admin_core_ref:
+        description: exment-admin-core ref
+        required: false
+        default: master
 
 env:
   EXMENT_REPOSITORY: exceedone/exment
-  EXMENT_REF: feature/laravel-12
   EXMENT_ADMIN_CORE_REPOSITORY: exceedone/exment-admin-core
-  EXMENT_ADMIN_CORE_REF: master
 
 jobs:
-  phpstan:
+  baseline:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -19,13 +25,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: ${{ env.EXMENT_REPOSITORY }}
-          ref: ${{ env.EXMENT_REF }}
+          ref: ${{ github.event.inputs.exment_ref }}
           path: ./exment
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ env.EXMENT_ADMIN_CORE_REPOSITORY }}
-          ref: ${{ env.EXMENT_ADMIN_CORE_REF }}
+          ref: ${{ github.event.inputs.exment_admin_core_ref }}
           path: ./exment-admin-core
 
       - name: Link this repository into docker-exment as exment-boilerplate
@@ -55,22 +61,37 @@ jobs:
         run: |
           make mysql-init
 
-      # Config + baseline chỉ có MỘT nguồn: chính repo exment đang được test.
-      # Repo này không giữ bản sao nào.
-      - name: setup phpstan
+      # Config lấy từ chính exment đang test; baseline cũ phải rỗng khi generate,
+      # nếu không lỗi cũ bị chính nó nuốt và baseline sinh ra sẽ thiếu.
+      - name: setup phpstan (empty baseline)
         working-directory: docker-exment
         run: |
           docker compose -f docker-compose.yml exec -T php cp vendor/exceedone/exment/phpstan.neon.dist .
-          # larastan đã đổi tên nunomaduro/larastan -> larastan/larastan (no-op khi exment cập nhật)
           docker compose -f docker-compose.yml exec -T php sed -i 's|vendor/nunomaduro/larastan|vendor/larastan/larastan|g' phpstan.neon.dist
-          # Baseline chưa được commit lên exment thì coi như rỗng -> CI báo toàn bộ lỗi
-          docker compose -f docker-compose.yml exec -T php sh -c \
-            "cp vendor/exceedone/exment/phpstan-baseline.neon . 2>/dev/null || printf 'parameters:\n\tignoreErrors: []\n' > phpstan-baseline.neon"
+          docker compose -f docker-compose.yml exec -T php sh -c "printf 'parameters:\n\tignoreErrors: []\n' > phpstan-baseline.neon"
           docker compose -f docker-compose.yml exec -T php sh -c \
             "grep -q phpstan-baseline.neon phpstan.neon.dist || sed -i '1a\\    - phpstan-baseline.neon' phpstan.neon.dist"
-          docker compose -f docker-compose.yml exec -T php head -5 phpstan.neon.dist
 
-      - name: run phpstan
+      - name: generate phpstan baseline
         working-directory: docker-exment
         run: |
-          docker compose -f docker-compose.yml exec -T php ./vendor/bin/phpstan analyse --memory-limit=1G
+          docker compose -f docker-compose.yml exec -T php ./vendor/bin/phpstan analyse \
+            --generate-baseline phpstan-baseline.neon \
+            --allow-empty-baseline \
+            --memory-limit=1G
+
+      - name: extract baseline from container
+        run: |
+          (cd docker-exment && docker compose -f docker-compose.yml exec -T php cat phpstan-baseline.neon) > /tmp/phpstan-baseline.neon
+          echo "--- baseline head ---"
+          head -n 40 /tmp/phpstan-baseline.neon
+          echo "--- baseline size ---"
+          wc -l /tmp/phpstan-baseline.neon
+
+      - name: upload baseline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: phpstan-baseline
+          path: /tmp/phpstan-baseline.neon
+          if-no-files-found: error
+          retention-days: 7
