@@ -6,10 +6,9 @@ on:
 
 env:
   EXMENT_REPOSITORY: exceedone/exment
-  EXMENT_REF: master
-  LARAVEL_ADMIN_REPOSITORY: exceedone/laravel-admin
-  LARAVEL_ADMIN_REF: master
-  LARAVEL_ADMIN_VERSION: 4.99.99
+  EXMENT_REF: feature/laravel-12
+  EXMENT_ADMIN_CORE_REPOSITORY: exceedone/exment-admin-core
+  EXMENT_ADMIN_CORE_REF: master
 
 jobs:
   check-lang:
@@ -26,9 +25,9 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ env.LARAVEL_ADMIN_REPOSITORY }}
-          ref: ${{ env.LARAVEL_ADMIN_REF }}
-          path: ./laravel-admin
+          repository: ${{ env.EXMENT_ADMIN_CORE_REPOSITORY }}
+          ref: ${{ env.EXMENT_ADMIN_CORE_REF }}
+          path: ./exment-admin-core
 
       - name: Link this repository into docker-exment as exment-boilerplate
         run: ln -s .. docker-exment/exment-boilerplate
@@ -47,12 +46,10 @@ jobs:
           docker compose -f docker-compose.yml exec -T php cp composer.dev.json composer.json
           docker compose -f docker-compose.yml exec -T php cp composer.dev.lock composer.lock
 
-      - name: Use cloned laravel-admin as path repository
+      - name: Ensure safe git directory
         working-directory: docker-exment
         run: |
           docker compose -f docker-compose.yml exec -T php git config --global --add safe.directory '*'
-          docker compose -f docker-compose.yml exec -T php composer config repositories.laravel-admin '{"type": "path", "url": "./laravel-admin", "options": {"symlink": true, "versions": {"exceedone/laravel-admin": "${{ env.LARAVEL_ADMIN_VERSION }}"}}}'
-          docker compose -f docker-compose.yml exec -T php composer update exceedone/laravel-admin --no-install --no-scripts --no-audit --with-all-dependencies
 
       - name: Make mysql Initialize
         working-directory: docker-exment
